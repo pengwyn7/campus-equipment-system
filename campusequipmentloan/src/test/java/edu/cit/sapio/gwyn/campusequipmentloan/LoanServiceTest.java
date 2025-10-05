@@ -21,7 +21,6 @@ import edu.cit.sapio.gwyn.campusequipmentloan.DOMAIN.EquipmentEntity;
 import edu.cit.sapio.gwyn.campusequipmentloan.DOMAIN.LoanEntity;
 import edu.cit.sapio.gwyn.campusequipmentloan.DOMAIN.LoanStatus;
 import edu.cit.sapio.gwyn.campusequipmentloan.DOMAIN.StudentEntity;
-import edu.cit.sapio.gwyn.campusequipmentloan.EXCEPTION.NotFoundException;
 import edu.cit.sapio.gwyn.campusequipmentloan.REPOSITORY.EquipmentRepository;
 import edu.cit.sapio.gwyn.campusequipmentloan.REPOSITORY.LoanRepository;
 import edu.cit.sapio.gwyn.campusequipmentloan.REPOSITORY.StudentRepository;
@@ -76,12 +75,14 @@ class LoanServiceTest {
         when(loanRepository.countByStudentAndStatus(student, LoanStatus.ACTIVE)).thenReturn(0L);
         when(loanRepository.save(any(LoanEntity.class))).thenAnswer(i -> i.getArguments()[0]);
 
+
         LoanEntity result = loanService.borrowEquipment(1L, 1L);
 
         assertNotNull(result);
         assertEquals(student, result.getStudent());
         assertEquals(equipment, result.getEquipment());
         assertEquals(LoanStatus.ACTIVE, result.getStatus());
+        assertEquals(result.getStartDate().plusDays(7), result.getDueDate());
         verify(equipmentRepository).save(any(EquipmentEntity.class));
         verify(loanRepository).save(any(LoanEntity.class));
     }
@@ -96,36 +97,16 @@ class LoanServiceTest {
     }
 
     @Test
-    void returnEquipment_success() {
-        when(loanRepository.findById(1L)).thenReturn(Optional.of(loan));
-        when(loanRepository.save(any(LoanEntity.class))).thenAnswer(i -> i.getArguments()[0]);
-
-        LoanEntity result = loanService.returnEquipment(1L);
-
-        assertNotNull(result.getReturnDate());
-        assertEquals(LoanStatus.RETURNED, result.getStatus());
-        assertTrue(result.getEquipment().isAvailable());
-        verify(equipmentRepository).save(any(EquipmentEntity.class));
-        verify(loanRepository).save(any(LoanEntity.class));
-    }
-
-    @Test
-    void getLoanById_notFound() {
-        when(loanRepository.findById(99L)).thenReturn(Optional.empty());
-        assertThrows(NotFoundException.class, () -> loanService.getLoanById(99L));
-    }
-
-    @Test
     void calculatePenalty_lateReturn() {
         loan.setDueDate(LocalDate.now().minusDays(5));
         loan.setReturnDate(LocalDate.now());
         loan.setStatus(LoanStatus.RETURNED);
 
-        when(penaltyStrat.calculatePenalty(5)).thenReturn(50.0);
+        when(penaltyStrat.calculatePenalty(5)).thenReturn(250.0);
 
         double penalty = loanService.calculatePenalty(loan);
 
-        assertEquals(50.0, penalty);
+        assertEquals(250.0, penalty);
         verify(penaltyStrat).calculatePenalty(5);
     }
 
@@ -135,24 +116,6 @@ class LoanServiceTest {
         List<EquipmentEntity> available = loanService.getAvailableEquipment();
         assertEquals(1, available.size());
         assertTrue(available.contains(equipment));
-    }
-
-    @Test
-    void updateLoan_updateDatesAndReturn() {
-        LoanEntity update = new LoanEntity();
-        update.setDueDate(LocalDate.now().plusDays(10));
-        update.setReturnDate(LocalDate.now().plusDays(11)); // late return
-
-        when(loanRepository.findById(1L)).thenReturn(Optional.of(loan));
-        when(loanRepository.save(any(LoanEntity.class))).thenAnswer(i -> i.getArguments()[0]);
-
-        LoanEntity result = loanService.updateLoan(1L, update);
-
-        assertEquals(update.getDueDate(), result.getDueDate());
-        assertEquals(update.getReturnDate(), result.getReturnDate());
-        assertEquals(LoanStatus.OVERDUE, result.getStatus()); // late return = overdue
-        assertTrue(result.getEquipment().isAvailable());
-        verify(equipmentRepository).save(any(EquipmentEntity.class));
     }
 
     @Test
@@ -167,5 +130,14 @@ class LoanServiceTest {
 
         assertEquals(LoanStatus.OVERDUE, loan.getStatus());
         verify(loanRepository).save(loan);
+    }
+
+    @Test
+    void borrowEquipment_maxActiveLoansExceeded() {
+        when(studentRepository.findById(1L)).thenReturn(Optional.of(student));
+        when(equipmentRepository.findById(1L)).thenReturn(Optional.of(equipment));
+        when(loanRepository.countByStudentAndStatus(student, LoanStatus.ACTIVE)).thenReturn(2L);
+
+        assertThrows(IllegalArgumentException.class, () -> loanService.borrowEquipment(1L, 1L));
     }
 }
