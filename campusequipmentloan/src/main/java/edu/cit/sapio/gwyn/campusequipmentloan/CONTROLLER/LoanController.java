@@ -75,27 +75,12 @@ public class LoanController {
         return ResponseEntity.ok(loanMap);
     }
 
-    // Manual trigger for updating overdue loans (for testing)
-    @PostMapping("/update-overdue")
-    public ResponseEntity<String> updateOverdueLoans() {
-        loanService.updateOverdueLoans();
-        return ResponseEntity.ok("Overdue loans updated successfully");
-    }
-
     // Update loan (allows updating dates - startDate, dueDate, returnDate)
     @PutMapping("/{id}")
     public ResponseEntity<Map<String, Object>> updateLoan(@PathVariable Long id, @RequestBody LoanEntity loanUpdate) {
         LoanEntity loan = loanService.updateLoan(id, loanUpdate);
         Map<String, Object> loanMap = createLoanMap(loan);
         return ResponseEntity.ok(loanMap);
-    }
-
-    // Get penalty for a loan
-    @GetMapping("/{id}/penalty")
-    public ResponseEntity<Double> getLoanPenalty(@PathVariable Long id) {
-        LoanEntity loan = loanService.getLoanById(id);
-        double penalty = loanService.calculatePenalty(loan);
-        return ResponseEntity.ok(penalty);
     }
 
     // Helper method to create loan map with penalty
